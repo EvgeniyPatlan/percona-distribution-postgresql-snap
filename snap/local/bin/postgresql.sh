@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Locale data ships inside the snap (percona-postgresql-18 depends on
+# Locale data ships inside the snap (percona-postgresql-17 depends on
 # `locales | locales-all`, staged transitively); point glibc at it
 # explicitly so initdb/postgres can see the locales they were built
 # against. Mirrors charmed-postgresql-snap's start-patroni.sh, which needs
@@ -17,7 +17,7 @@ exec "${SNAP}/usr/bin/setpriv" \
     --reuid snap_daemon \
     --regid snap_daemon \
     -- \
-    "${SNAP}/usr/lib/postgresql/18/bin/postgres" \
+    "${SNAP}/usr/lib/postgresql/17/bin/postgres" \
     -D "${SNAP_COMMON}/data" \
     -c config_file="${SNAP_DATA}/etc/postgresql/postgresql.conf" \
     "${EXTRA_ARGS[@]}"

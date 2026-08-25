@@ -1,10 +1,10 @@
 summary: Percona Distribution for PostgreSQL upgrade tests
 
-# TODO(release): remove `manual` once percona-distribution-postgresql is published to 18/edge
+# TODO(release): remove `manual` once percona-distribution-postgresql is published to 17/edge
 manual: true
 
 prepare: |
-  snap install percona-distribution-postgresql --channel 18/edge
+  snap install percona-distribution-postgresql --channel 17/edge
   until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
     echo "Waiting for postgres socket"
     sleep 1

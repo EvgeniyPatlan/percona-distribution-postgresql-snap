@@ -43,7 +43,7 @@ postgresql:
   listen: 127.0.0.1:5433
   connect_address: 127.0.0.1:5433
   data_dir: /var/snap/_NAME_/common/patroni-data
-  bin_dir: /snap/_NAME_/current/usr/lib/postgresql/18/bin
+  bin_dir: /snap/_NAME_/current/usr/lib/postgresql/17/bin
   pgpass: /var/snap/_NAME_/common/patroni-data/pgpass
   authentication:
     replication:

@@ -71,7 +71,7 @@ if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
         --reuid snap_daemon \
         --regid snap_daemon \
         -- \
-        "${SNAP}/usr/lib/postgresql/18/bin/initdb" \
+        "${SNAP}/usr/lib/postgresql/17/bin/initdb" \
         -D "${SNAP_COMMON}/data" \
         --username=snap_daemon \
         --auth-local=peer \
