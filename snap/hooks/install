@@ -1,0 +1,81 @@
+#!/bin/bash
+set -euo pipefail
+
+# One-touch ownership rule (family idiom, PSMDB-proven under strict/jailmode
+# confinement): a path tolerates exactly ONE post-creation mutating touch
+# (chown OR chmod) -- whichever op runs second on that path fails
+# (EPERM/EACCES) regardless of order. So every directory gets its final
+# mode baked in at `mkdir -m` time, every config file is seeded BEFORE the
+# chown that covers its directory, and each path gets exactly one
+# `chown -R snap_daemon:root` afterward. Owner-run ops (setpriv-as-
+# snap_daemon, e.g. initdb below) are exempt -- they run after the handoff,
+# as the owner, not as a second root-side touch.
+
+# Data directory: single non-recursive chown (nothing is seeded into it by
+# this hook -- initdb, run as the owner below, populates it).
+mkdir -p -m 0700 "${SNAP_COMMON}/data"
+chown snap_daemon:root "${SNAP_COMMON}/data"
+
+# Log / etcd / pgbackrest-repo / patroni-scratch-cluster directories.
+mkdir -p -m 0770 \
+    "${SNAP_COMMON}/log" \
+    "${SNAP_COMMON}/etcd" \
+    "${SNAP_COMMON}/pgbackrest" \
+    "${SNAP_COMMON}/patroni-data"
+chown -R snap_daemon:root \
+    "${SNAP_COMMON}/log" \
+    "${SNAP_COMMON}/etcd" \
+    "${SNAP_COMMON}/pgbackrest" \
+    "${SNAP_COMMON}/patroni-data"
+
+# Config (etc) and socket (run) directories under SNAP_DATA. etc/postgresql
+# is the one nested pair (postgresql.conf + pg_hba.conf); every other
+# template is seeded flat into etc/.
+mkdir -p -m 0750 "${SNAP_DATA}/etc/postgresql"
+mkdir -p -m 0770 "${SNAP_DATA}/run"
+
+# Seed all templates (cp-if-absent, so a refresh never clobbers operator
+# edits) BEFORE the chown below so the single chown -R also covers them.
+[ -f "${SNAP_DATA}/etc/postgresql/postgresql.conf" ] || \
+    cp "${SNAP}/etc/postgresql.conf" "${SNAP_DATA}/etc/postgresql/postgresql.conf"
+[ -f "${SNAP_DATA}/etc/postgresql/pg_hba.conf" ] || \
+    cp "${SNAP}/etc/pg_hba.conf" "${SNAP_DATA}/etc/postgresql/pg_hba.conf"
+[ -f "${SNAP_DATA}/etc/pgbouncer.ini" ] || \
+    cp "${SNAP}/etc/pgbouncer.ini" "${SNAP_DATA}/etc/pgbouncer.ini"
+[ -f "${SNAP_DATA}/etc/pgbouncer-userlist.txt" ] || \
+    touch "${SNAP_DATA}/etc/pgbouncer-userlist.txt"
+[ -f "${SNAP_DATA}/etc/patroni.yml" ] || \
+    cp "${SNAP}/etc/patroni.yml" "${SNAP_DATA}/etc/patroni.yml"
+[ -f "${SNAP_DATA}/etc/etcd.conf.yml" ] || \
+    cp "${SNAP}/etc/etcd.conf.yml" "${SNAP_DATA}/etc/etcd.conf.yml"
+[ -f "${SNAP_DATA}/etc/haproxy.cfg" ] || \
+    cp "${SNAP}/etc/haproxy.cfg" "${SNAP_DATA}/etc/haproxy.cfg"
+[ -f "${SNAP_DATA}/etc/pgpool.conf" ] || \
+    cp "${SNAP}/etc/pgpool.conf" "${SNAP_DATA}/etc/pgpool.conf"
+[ -f "${SNAP_DATA}/etc/pgbackrest.conf" ] || \
+    cp "${SNAP}/etc/pgbackrest.conf" "${SNAP_DATA}/etc/pgbackrest.conf"
+
+chown -R snap_daemon:root "${SNAP_DATA}/etc" "${SNAP_DATA}/run"
+
+# initdb runs AS the owner (setpriv-as-snap_daemon) after every chown above
+# has already handed the data directory to snap_daemon -- this is an
+# owner-run op, exempt from the one-touch rule, not a second root-side
+# mutation. Guarded so a refresh (data dir already initialized) is a no-op.
+if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
+    "${SNAP}/usr/bin/setpriv" \
+        --clear-groups \
+        --reuid snap_daemon \
+        --regid snap_daemon \
+        -- \
+        "${SNAP}/usr/lib/postgresql/18/bin/initdb" \
+        -D "${SNAP_COMMON}/data" \
+        --username=snap_daemon \
+        --auth-local=peer \
+        --auth-host=scram-sha-256 \
+        --encoding=UTF8
+
+    if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
+        echo "Error: initdb did not produce a data directory at ${SNAP_COMMON}/data (no PG_VERSION file)." >&2
+        exit 1
+    fi
+fi
