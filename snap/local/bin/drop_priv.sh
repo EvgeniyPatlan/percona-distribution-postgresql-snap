@@ -22,13 +22,13 @@ set -euo pipefail
 # description's "connect immediately" promise (sudo <snap>.psql, no -h)
 # actually true; an explicit -h/--host on the command line still wins over
 # this env default, same as any other libpq env var.
-export PGHOST="${SNAP_DATA}/run"
+export PGHOST="${PGHOST:-${SNAP_DATA}/run}"
 # libpq also defaults the target database name to the OS/session
 # username -- snap_daemon here, which is not a real database (initdb only
 # creates "postgres"/"template0"/"template1"). Without this, even a
 # correctly-PGHOST'd `sudo <snap>.psql` fails with `database "snap_daemon"
 # does not exist`. An explicit dbname argument or -d/--dbname still wins.
-export PGDATABASE="postgres"
+export PGDATABASE="${PGDATABASE:-postgres}"
 
 # pgbadger (the one perl script routed through this wrapper) fails with
 # "Can't locate Benchmark.pm in @INC" without this -- core26 ships no

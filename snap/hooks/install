@@ -36,6 +36,10 @@ mkdir -p -m 0770 "${SNAP_DATA}/run"
 
 # Seed all templates (cp-if-absent, so a refresh never clobbers operator
 # edits) BEFORE the chown below so the single chown -R also covers them.
+# Seed-if-absent means config additions in NEW revisions (e.g. archive_mode
+# for pgbackrest) do NOT reach existing installs on refresh -- operators
+# must reconcile manually; revisit with a post-refresh migration if this
+# ships to stable.
 [ -f "${SNAP_DATA}/etc/postgresql/postgresql.conf" ] || \
     cp "${SNAP}/etc/postgresql.conf" "${SNAP_DATA}/etc/postgresql/postgresql.conf"
 [ -f "${SNAP_DATA}/etc/postgresql/pg_hba.conf" ] || \
