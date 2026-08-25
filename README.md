@@ -237,16 +237,12 @@ sudo snap start percona-distribution-postgresql.patroni
 ```
 
 etcd's health endpoint is `http://127.0.0.1:2379/health`; Patroni's REST
-API is `127.0.0.1:8008`. `patronictl` has no snap app wrapper — it's a
-setuptools entry-point shim, so it needs its site tree on `PYTHONPATH`
-(and `LOCPATH` for locale data) to import anything, the same env
-`bin/patroni.sh` sets up for the daemon itself:
+API is `127.0.0.1:8008`. `patronictl` ships as its own snap app (it must
+run on the snap's bundled python — a host interpreter cannot import the
+snap's C extensions):
 
 ```
-SNAP_CUR=/snap/percona-distribution-postgresql/current
-export PYTHONPATH="${SNAP_CUR}/usr/lib/python3/dist-packages"
-export LOCPATH="${SNAP_CUR}/usr/lib/locale"
-"${SNAP_CUR}/usr/bin/patronictl" \
+sudo percona-distribution-postgresql.patronictl \
   -c /var/snap/percona-distribution-postgresql/current/etc/patroni.yml list
 ```
 
