@@ -1,0 +1,378 @@
+name: percona-distribution-postgresql
+base: core26
+version: '18.6-1'
+summary: Percona Distribution for PostgreSQL 18 in a snap.
+description: |
+  Percona Distribution for PostgreSQL packages PostgreSQL 18 together with
+  every extension, backup/pooling tool, and HA component Percona ships:
+  pg_tde (transparent data encryption), pg_stat_monitor, pgAudit (+
+  set_user), pgvector, pg_cron, pg_repack, wal2json, pgBackRest, PgBouncer,
+  pgBadger, pg_gather, Patroni, etcd, HAProxy, Pgpool-II, and PostGIS plus
+  the PL/Perl, PL/Python3, and PL/Tcl procedural languages.
+
+  On install the snap initializes the data directory (initdb) and starts
+  postgres. The superuser role IS the snap's own system user, snap_daemon:
+  every client command in this snap (psql, pg-dump, ...) drops privileges
+  to snap_daemon before connecting over the local Unix socket, and peer
+  authentication on that socket makes it the postgres superuser with NO
+  PASSWORD. Connect immediately with:
+    sudo percona-distribution-postgresql.psql
+  Host (TCP, 127.0.0.1) connections are NOT covered by peer auth — they
+  need an explicitly created role with a scram-sha-256 password; see
+  pg_hba.conf.
+
+  Shell-redirecting a client command's stdout needs `| cat` appended (snap
+  confinement leaves stdout as a non-standard fd otherwise), e.g.:
+    sudo percona-distribution-postgresql.pg-dump postgres | cat > backup.sql
+  Input files for client commands (COPY FROM, pgBackRest repos, log files
+  for pgbadger, ...) must live under
+  /var/snap/percona-distribution-postgresql/common — the snap cannot read
+  your home directory.
+
+  Preloaded on every start (shared_preload_libraries): pg_tde,
+  pg_stat_monitor, pgaudit, pg_cron. Everything else in the core/extension
+  set is a plain `CREATE EXTENSION vector|postgis|pg_repack|pgaudit|
+  set_user|...` once connected. wal2json is the one exception: it ships as
+  a logical-decoding OUTPUT PLUGIN, not an extension — select it via
+  `pg_recvlogical --plugin=wal2json` or
+  `pg_create_logical_replication_slot('slot', 'wal2json')`.
+  pg_tde additionally needs a key provider configured before use:
+    SELECT pg_tde_add_key_provider_file('file-keyring',
+      '{"type":"file","path":"/var/snap/percona-distribution-postgresql/common/pg_tde_keyring"}');
+    SELECT pg_tde_set_principal_key('principal-key', 'file-keyring');
+  See Percona's pg_tde documentation before using this for production data
+  — a file keyring is a starting point, not a production keyring.
+
+  Optional services (disabled by default, start with `snap start`):
+    .pgbouncer — connection pooler; listens on 127.0.0.1:6432; config at
+      .../current/etc/pgbouncer.ini; auth_file starts empty at
+      .../current/etc/pgbouncer-userlist.txt — add scram roles before use.
+    .patroni + .etcd — Patroni manages ITS OWN postgres cluster (a scratch
+      cluster under .../common/patroni-data, listening on 127.0.0.1:5433),
+      backed by a single-node etcd on 127.0.0.1:2379 (peers on :2380).
+      STOP `.postgresql` first — Patroni and the main daemon are not meant
+      to run against the same data directory. Patroni's REST API is on
+      127.0.0.1:8008; config at .../current/etc/patroni.yml and
+      .../current/etc/etcd.conf.yml.
+    .haproxy — TCP-mode load balancer; config at
+      .../current/etc/haproxy.cfg (no frontend/backend enabled by default
+      — uncomment the example, which points at this snap's own postgres).
+    .pgpool — connection pooling/load balancing; listens on 127.0.0.1:9999
+      (PCP admin on :9898); config at .../current/etc/pgpool.conf, wired
+      to this snap's own postgres on 5432 by default.
+
+  Ops CLIs: pgbackrest (config at .../current/etc/pgbackrest.conf, repo
+  under .../common/pgbackrest), pgbadger (point it at a log file under
+  .../common/log), pg-gather (runs Percona's gather.sql diagnostic script
+  against this snap's own postgres via psql).
+
+  Tracks: 18/edge (PostgreSQL 18, this build) and 17/edge (PostgreSQL 17).
+title: Percona Distribution for PostgreSQL
+contact: https://github.com/EvgeniyPatlan/percona-distribution-postgresql-snap/issues
+issues: https://github.com/EvgeniyPatlan/percona-distribution-postgresql-snap/issues
+source-code: https://github.com/EvgeniyPatlan/percona-distribution-postgresql-snap
+website: https://www.percona.com/postgresql/software/percona-distribution-for-postgresql
+
+grade: stable
+confinement: strict
+license: Apache-2.0
+platforms:
+  amd64:
+  arm64:
+
+system-usernames:
+  snap_daemon: shared
+
+package-repositories:
+  - type: apt
+    url: https://repo.percona.com/ppg-18/apt
+    suites: [resolute]
+    components: [main]
+    key-id: 4D1BB29D63D98E422B2113B19334A25F8507EFA5
+
+hooks:
+  # initdb is local-only (no networking); the install hook needs no plugs
+  # at all (valkey-lesson consistency — see the family's binding §9 list).
+  install: {}
+  configure: {}
+
+apps:
+  postgresql:
+    command: bin/postgresql.sh
+    daemon: simple
+    stop-timeout: 5m
+    plugs:
+      - network
+      - network-bind
+  pgbouncer:
+    command: bin/pgbouncer.sh
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+  patroni:
+    command: bin/patroni.sh
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+  etcd:
+    command: bin/etcd.sh
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+  haproxy:
+    command: bin/haproxy.sh
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+  pgpool:
+    command: bin/pgpool.sh
+    daemon: simple
+    install-mode: disable
+    plugs:
+      - network
+      - network-bind
+  psql:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/psql
+    plugs:
+      - network
+  pg-dump:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_dump
+    plugs:
+      - network
+  pg-dumpall:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_dumpall
+    plugs:
+      - network
+  pg-restore:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_restore
+    plugs:
+      - network
+  pg-basebackup:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_basebackup
+    plugs:
+      - network
+  pgbench:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pgbench
+    plugs:
+      - network
+  createdb:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/createdb
+    plugs:
+      - network
+  dropdb:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/dropdb
+    plugs:
+      - network
+  createuser:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/createuser
+    plugs:
+      - network
+  dropuser:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/dropuser
+    plugs:
+      - network
+  pg-isready:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_isready
+    plugs:
+      - network
+  vacuumdb:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/vacuumdb
+    plugs:
+      - network
+  reindexdb:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/reindexdb
+    plugs:
+      - network
+  clusterdb:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/clusterdb
+    plugs:
+      - network
+  pg-repack:
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/pg_repack
+    plugs:
+      - network
+  pgbackrest:
+    command: bin/drop_priv.sh $SNAP/usr/bin/pgbackrest
+    environment:
+      # Default config so pgbackrest works without --config (mirrors
+      # charmed-postgresql-snap's pgbackrest app).
+      PGBACKREST_CONFIG: $SNAP_DATA/etc/pgbackrest.conf
+    plugs:
+      - network
+  pgbadger:
+    command: bin/drop_priv.sh $SNAP/usr/bin/pgbadger
+    plugs:
+      - network
+  pg-gather:
+    # percona-pg-gather ships NO binary — only a diagnostic SQL script
+    # (usr/share/postgresql/18/contrib/gather.sql, dpkg-verified). Run it
+    # against this snap's own postgres via psql -f; trailing args (e.g. a
+    # different -d dbname) are still accepted after the script path.
+    command: bin/drop_priv.sh $SNAP/usr/lib/postgresql/18/bin/psql -f $SNAP/usr/share/postgresql/18/contrib/gather.sql
+    plugs:
+      - network
+
+parts:
+  packages-deb:
+    plugin: nil
+    stage-packages:
+      # Core
+      - percona-postgresql-18=3:18.6-1.resolute
+      - percona-postgresql-client-18=3:18.6-1.resolute
+      - percona-postgresql-common=1:293-1.resolute
+      - percona-postgresql-contrib=1:293-1.resolute
+      - percona-postgresql-18-jit=3:18.6-1.resolute
+      # Extensions
+      - percona-pg-tde18=1:2.2.2-1.resolute
+      - percona-pg-stat-monitor18=1:2.3.2-4.resolute
+      - percona-postgresql-18-pgaudit=1:18.0-4.resolute
+      - percona-pgaudit18-set-user=1:4.2.0-4.resolute
+      - percona-postgresql-18-pgvector=1:0.8.6-1.resolute
+      - percona-postgresql-18-cron=1:1.6.7-3.resolute
+      - percona-postgresql-18-repack=1:1.5.3-4.resolute
+      - percona-postgresql-18-wal2json=1:2.6-5.resolute
+      # Ops (backup / pooling / analysis)
+      - percona-pgbackrest=1:2.59.0-1.resolute
+      - percona-pgbouncer=1:1.25.2-2.resolute
+      - percona-pgbadger=1:13.2-3.resolute
+      - percona-pg-gather=1:33-3.resolute
+      # HA stack
+      - percona-patroni=1:4.1.5-1.resolute
+      - etcd=1:3.5.33-1.resolute
+      - percona-haproxy=2:2.8.27-1.resolute
+      - percona-pgpool2=1:4.7.2-2.resolute
+      # Heavy: PostGIS + PL languages
+      - percona-postgresql-18-postgis-3=2:3.5.7-3.resolute
+      - percona-postgresql-plperl-18=3:18.6-1.resolute
+      - percona-postgresql-plpython3-18=3:18.6-1.resolute
+      - percona-postgresql-pltcl-18=3:18.6-1.resolute
+      # From the base Ubuntu archive, not repo.percona.com (unpinned, like
+      # the rest of the family's util-linux staging):
+      #   - util-linux: ships /usr/bin/setpriv, used by every wrapper.
+      #   - python3: percona-patroni's own Depends (python3-click, ...,
+      #     python3:any) pull the interpreter in transitively already;
+      #     staged explicitly anyway, mirroring the family's toolkit-perl
+      #     precedent of not relying on a transitive pull for a runtime
+      #     the snap directly execs (patroni.sh; see also pg_repack /
+      #     other tools potentially needing it).
+      #   - perl: percona-pgbadger's Depends (perl:any) and plperl's
+      #     libperl5.40 dependency chain would pull it in too; staged
+      #     explicitly for the same reason (pgbadger is a perl script).
+      #   - tcl8.6: pltcl only needs libtcl8.6 (already a transitive
+      #     Depends) to dlopen pltcl.so — no snap app execs tclsh — but
+      #     staged explicitly per the same defensive precedent.
+      - util-linux
+      - python3
+      - perl
+      - tcl8.6
+    organize:
+      # --- Collision relocations: postgresql-common and every other deb
+      # in this stage-packages list that ships its OWN /etc payload. This
+      # snap's authoritative configs are the snap-scripts templates below
+      # (seeded into $SNAP_DATA/etc/... by the install hook); the debs'
+      # packaged copies are moved aside as inert operator reference
+      # material rather than left live in $SNAP/etc (the mysqld-includedir
+      # class of live-scanned /etc does not exist in this family member).
+      etc/postgresql-common/pg_upgradecluster.d/analyze: usr/share/percona-postgresql-common/pg_upgradecluster.d/analyze.default
+      etc/etcd/etcd.conf.yaml: usr/share/etcd-server/etcd.conf.yaml.default
+      etc/haproxy/haproxy.cfg: usr/share/percona-haproxy/haproxy.cfg.default
+      etc/haproxy/errors: usr/share/percona-haproxy/errors.default
+      etc/patroni/patroni.yml.sample: usr/share/percona-patroni/patroni.yml.sample.default
+      etc/pgbackrest.conf: usr/share/percona-pgbackrest/pgbackrest.conf.default
+      etc/pgbouncer/pgbouncer.ini: usr/share/percona-pgbouncer/pgbouncer.ini.default
+      etc/pgbouncer/userlist.txt: usr/share/percona-pgbouncer/userlist.txt.default
+      etc/pgpool2/pcp.conf: usr/share/percona-pgpool2/pcp.conf.default
+      etc/pgpool2/pool_hba.conf: usr/share/percona-pgpool2/pool_hba.conf.default
+      etc/pgpool2/pool_passwd: usr/share/percona-pgpool2/pool_passwd.default
+      # --- Copyright relocations (dpkg-verified per package; two staged
+      # debs ship none at all — percona-pg-gather and percona-pg-tde18,
+      # each only carries usr/share/doc/<pkg>/changelog.Debian.gz [+
+      # README.md for pg_tde] — nothing to relocate for those two).
+      usr/share/doc/percona-postgresql-18/copyright: licenses/COPYRIGHT-percona-postgresql-18
+      usr/share/doc/percona-postgresql-18-jit/copyright: licenses/COPYRIGHT-percona-postgresql-18-jit
+      usr/share/doc/percona-postgresql-client-18/copyright: licenses/COPYRIGHT-percona-postgresql-client-18
+      usr/share/doc/percona-postgresql-plperl-18/copyright: licenses/COPYRIGHT-percona-postgresql-plperl-18
+      usr/share/doc/percona-postgresql-plpython3-18/copyright: licenses/COPYRIGHT-percona-postgresql-plpython3-18
+      usr/share/doc/percona-postgresql-pltcl-18/copyright: licenses/COPYRIGHT-percona-postgresql-pltcl-18
+      usr/share/doc/percona-postgresql-common/copyright: licenses/COPYRIGHT-percona-postgresql-common
+      usr/share/doc/postgresql-common/copyright: licenses/COPYRIGHT-postgresql-common
+      usr/share/doc/percona-postgresql-contrib/copyright: licenses/COPYRIGHT-percona-postgresql-contrib
+      usr/share/doc/percona-postgresql-18-cron/copyright: licenses/COPYRIGHT-percona-postgresql-18-cron
+      usr/share/doc/percona-postgresql-18-pgaudit/copyright: licenses/COPYRIGHT-percona-postgresql-18-pgaudit
+      usr/share/doc/percona-pgaudit18-set-user/copyright: licenses/COPYRIGHT-percona-pgaudit18-set-user
+      usr/share/doc/percona-postgresql-18-pgvector/copyright: licenses/COPYRIGHT-percona-postgresql-18-pgvector
+      usr/share/doc/percona-postgresql-18-postgis-3/copyright: licenses/COPYRIGHT-percona-postgresql-18-postgis-3
+      usr/share/doc/percona-postgresql-18-postgis-3-scripts/copyright: licenses/COPYRIGHT-percona-postgresql-18-postgis-3-scripts
+      usr/share/doc/percona-postgresql-18-repack/copyright: licenses/COPYRIGHT-percona-postgresql-18-repack
+      usr/share/doc/percona-postgresql-18-wal2json/copyright: licenses/COPYRIGHT-percona-postgresql-18-wal2json
+      usr/share/doc/percona-pgbackrest/copyright: licenses/COPYRIGHT-percona-pgbackrest
+      usr/share/doc/percona-pgbouncer/copyright: licenses/COPYRIGHT-percona-pgbouncer
+      usr/share/doc/percona-pgbadger/copyright: licenses/COPYRIGHT-percona-pgbadger
+      usr/share/doc/percona-pgpool2/copyright: licenses/COPYRIGHT-percona-pgpool2
+      usr/share/doc/libpgpoolpcp3/copyright: licenses/COPYRIGHT-libpgpoolpcp3
+      usr/share/doc/percona-haproxy/copyright: licenses/COPYRIGHT-percona-haproxy
+      usr/share/doc/percona-patroni/copyright: licenses/COPYRIGHT-percona-patroni
+      usr/share/doc/etcd/copyright: licenses/COPYRIGHT-etcd
+      usr/share/doc/etcd-client/copyright: licenses/COPYRIGHT-etcd-client
+      usr/share/doc/etcd-server/copyright: licenses/COPYRIGHT-etcd-server
+      usr/share/doc/util-linux/copyright: licenses/COPYRIGHT-util-linux
+      usr/share/doc/python3/copyright: licenses/COPYRIGHT-python3
+      usr/share/doc/perl/copyright: licenses/COPYRIGHT-perl
+      usr/share/doc/tcl8.6/copyright: licenses/COPYRIGHT-tcl8.6
+    prime:
+      # Host-only integration noise (init scripts, sysvinit env files,
+      # logrotate/rsyslog/PAM/systemd hookups, man pages, lintian
+      # overrides) that makes no sense inside a snap. perl's
+      # etc/perl/Net/libnet.cfg (Net::Config defaults for FTP-family
+      # modules) is dropped too — nothing in this snap uses those
+      # protocols. A further unused-library lint pass needs a real
+      # `snapcraft pack` build (out of scope here) and is ledgered as a
+      # follow-up rather than guessed at.
+      - -etc/init.d
+      - -etc/default
+      - -etc/logrotate.d
+      - -etc/rsyslog.d
+      - -etc/pam.d
+      - -etc/perl
+      - -lib/systemd
+      - -usr/lib/systemd
+      - -usr/lib/tmpfiles.d
+      - -usr/share/man
+      - -usr/share/lintian
+      # Now-empty directories left behind once the files inside them were
+      # organized out above (postgresql-common's /etc/postgresql is an
+      # empty stub to begin with — this snap bypasses pg_wrapper/
+      # pg_createcluster entirely, see snap/local/etc/postgresql.conf).
+      - -etc/postgresql
+      - -etc/postgresql-common
+      - -etc/haproxy
+      - -etc/patroni
+      - -etc/pgbouncer
+      - -etc/pgpool2
+      - -etc/etcd
+  snap-license:
+    plugin: dump
+    source: .
+    source-type: local
+    stage:
+      - licenses/LICENSE-snap
+    organize:
+      LICENSE: licenses/LICENSE-snap
+  snap-scripts:
+    plugin: dump
+    source: snap/local
+    source-type: local
+    override-prime: |
+      craftctl default
+      sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' bin/*.sh
+      sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.conf
+      sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.ini
+      sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.yml
