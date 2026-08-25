@@ -1,0 +1,47 @@
+summary: Percona Distribution for PostgreSQL CLI tools tests
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  echo "Testing CLI tools"
+
+  CMD="percona-distribution-postgresql.psql"
+
+  echo "Creating test data"
+  ${CMD} -c "CREATE TABLE cli_probe (id INT PRIMARY KEY, v TEXT);"
+  ${CMD} -c "INSERT INTO cli_probe VALUES (1, 'clidata');"
+
+  echo "pg_dump | cat (zero flags -- PGHOST/PGDATABASE defaults from drop_priv.sh)"
+  percona-distribution-postgresql.pg-dump | cat >cli_probe.sql
+  grep -q "cli_probe" cli_probe.sql
+  grep -q "clidata" cli_probe.sql
+
+  echo "Drop and restore from the dump"
+  ${CMD} -c "DROP TABLE cli_probe;"
+  cat cli_probe.sql | ${CMD}
+  ${CMD} -tAc "SELECT v FROM cli_probe WHERE id = 1;" | grep -q clidata
+  ${CMD} -c "DROP TABLE cli_probe;"
+
+  echo "pgbench tiny run"
+  percona-distribution-postgresql.createdb pgbench_test
+  percona-distribution-postgresql.pgbench -i -s 1 pgbench_test
+  percona-distribution-postgresql.pgbench -c 1 -T 5 pgbench_test | grep -q "tps ="
+  percona-distribution-postgresql.dropdb pgbench_test
+
+  echo "pg_isready"
+  percona-distribution-postgresql.pg-isready | grep -q "accepting connections"
+
+  echo "pgbadger --version"
+  percona-distribution-postgresql.pgbadger --version | grep -Eq '[0-9]+\.[0-9]+'
+
+  echo "pg_gather (psql -f form) round-trip to a host file"
+  percona-distribution-postgresql.pg-gather | cat >gather_output.txt
+  [ -s gather_output.txt ]
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

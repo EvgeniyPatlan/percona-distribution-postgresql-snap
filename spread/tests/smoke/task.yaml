@@ -1,0 +1,99 @@
+summary: Percona Distribution for PostgreSQL snap smoke tests
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  echo "Percona Distribution for PostgreSQL snap smoke tests"
+
+  CMD="percona-distribution-postgresql.psql"
+  KEYRING_DIR=/var/snap/percona-distribution-postgresql/common/pg_tde_keyring
+
+  echo "Wait for postgres to accept connections (app-level, not just socket presence)"
+  ok=0
+  for _ in $(seq 30); do
+    percona-distribution-postgresql.pg-isready -q && { ok=1; break; }
+    sleep 2
+  done
+  [ "$ok" = 1 ]
+
+  echo "Version check"
+  SNAP_VERSION=$(awk -F\' '/^version/{print $2}' "${SPREAD_PATH}"/snap/snapcraft.yaml)
+  PG_VERSION="${SNAP_VERSION%%-*}"
+  ${CMD} -tAc "SELECT version();" | grep -q "PostgreSQL ${PG_VERSION:-error}"
+
+  echo "Preloaded extension quartet"
+  ${CMD} -tAc "SHOW shared_preload_libraries;" | grep -q "pg_tde,pg_stat_monitor,pgaudit,pg_cron"
+
+  echo "CRUD"
+  ${CMD} -c "CREATE TABLE smoke_probe (id INT PRIMARY KEY, v TEXT);"
+  ${CMD} -c "INSERT INTO smoke_probe VALUES (1, 'hello');"
+  ${CMD} -tAc "SELECT v FROM smoke_probe WHERE id = 1;" | grep -q hello
+  ${CMD} -c "UPDATE smoke_probe SET v = 'updated' WHERE id = 1;"
+  ${CMD} -tAc "SELECT v FROM smoke_probe WHERE id = 1;" | grep -q updated
+  ${CMD} -c "DELETE FROM smoke_probe WHERE id = 1;"
+  ${CMD} -tAc "SELECT count(*) FROM smoke_probe;" | grep -q '^0$'
+  ${CMD} -c "DROP TABLE smoke_probe;"
+
+  echo "pg_tde: file keyring -> principal key -> tde_heap -> insert/select"
+  # Task 5's report: pg_tde's real 3-call flow (add provider, create key,
+  # THEN set key -- skipping the create step fails with "key ... does not
+  # exist"). The keyring directory is not seeded by the install hook, so
+  # this suite creates it itself, owned by snap_daemon (the postgres
+  # server process's own uid, per postgresql.sh) since pg_tde writes the
+  # keyring file from inside the server, not from the psql client.
+  mkdir -p "${KEYRING_DIR}"
+  chown snap_daemon:root "${KEYRING_DIR}"
+  ${CMD} -c "CREATE EXTENSION pg_tde;"
+  ${CMD} -c "SELECT pg_tde_add_global_key_provider_file('file-keyring', '${KEYRING_DIR}/keyring');"
+  ${CMD} -c "SELECT pg_tde_create_key_using_global_key_provider('principal-key', 'file-keyring');"
+  ${CMD} -c "SELECT pg_tde_set_key_using_global_key_provider('principal-key', 'file-keyring');"
+  ${CMD} -c "CREATE TABLE tde_probe (id INT PRIMARY KEY, v TEXT) USING tde_heap;"
+  ${CMD} -c "INSERT INTO tde_probe VALUES (1, 'secret');"
+  ${CMD} -tAc "SELECT v FROM tde_probe WHERE id = 1;" | grep -q secret
+  ${CMD} -c "DROP TABLE tde_probe;"
+
+  echo "vector: distance query"
+  ${CMD} -c "CREATE EXTENSION vector;"
+  ${CMD} -tAc "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector;" | grep -Eq '^5\.19'
+
+  echo "pg_stat_monitor: real query recorded"
+  ${CMD} -c "CREATE EXTENSION pg_stat_monitor;"
+  ${CMD} -c "SELECT 1;" >/dev/null
+  ${CMD} -tAc "SELECT count(*) FROM pg_stat_monitor;" | grep -Eq '^[1-9][0-9]*$'
+
+  echo "pgaudit: log line for a real DDL"
+  ${CMD} -c "CREATE EXTENSION pgaudit;"
+  ${CMD} -c "SET pgaudit.log = 'ddl'; CREATE TABLE audit_probe (id INT); DROP TABLE audit_probe;"
+  LOGFILE=$(ls -t /var/snap/percona-distribution-postgresql/common/log/postgresql-*.log | head -n1)
+  grep -q "AUDIT:.*CREATE TABLE audit_probe" "${LOGFILE}"
+
+  echo "pg_cron: extension installs cleanly (preloaded)"
+  ${CMD} -c "CREATE EXTENSION pg_cron;"
+  ${CMD} -tAc "SELECT extname FROM pg_extension WHERE extname = 'pg_cron';" | grep -q pg_cron
+
+  echo "postgis: PostGIS_Version()"
+  ${CMD} -c "CREATE EXTENSION postgis;"
+  ${CMD} -tAc "SELECT PostGIS_Version();" | grep -q "3.5"
+
+  echo "plpython3u: a real function"
+  ${CMD} -c "CREATE EXTENSION plpython3u;"
+  ${CMD} -c 'CREATE FUNCTION py_add(a int, b int) RETURNS int AS $$ return a + b $$ LANGUAGE plpython3u;'
+  ${CMD} -tAc "SELECT py_add(2, 3);" | grep -q '^5$'
+
+  echo "set_user: extension installs cleanly"
+  ${CMD} -c "CREATE EXTENSION set_user;"
+  ${CMD} -tAc "SELECT extname FROM pg_extension WHERE extname = 'set_user';" | grep -q set_user
+
+  echo "Anchored snap-services checks"
+  snap services percona-distribution-postgresql.postgresql | grep -qE '\.postgresql\s+enabled\s+active'
+  for svc in pgbouncer patroni etcd haproxy pgpool; do
+    snap services percona-distribution-postgresql | grep -qE "${svc}\s+disabled\s+inactive"
+  done
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

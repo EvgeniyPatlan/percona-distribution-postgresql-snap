@@ -1,0 +1,23 @@
+project: percona-distribution-postgresql-snap
+
+path: /home/ubuntu/percona-distribution-postgresql-snap
+
+environment:
+  CRAFT_ARTIFACT: $(HOST:printenv CRAFT_ARTIFACT)
+
+backends:
+  lxd:
+    type: lxd
+    systems:
+      - ubuntu-24.04
+
+suites:
+  spread/tests/:
+    summary: General integration tests
+    prepare: |
+      apt remove --purge --yes postgresql* percona* || true
+
+exclude:
+  - .git
+
+kill-timeout: 1h
