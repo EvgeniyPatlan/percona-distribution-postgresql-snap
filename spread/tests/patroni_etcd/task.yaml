@@ -45,18 +45,11 @@ execute: |
   echo "Starting patroni"
   snap start percona-distribution-postgresql.patroni
 
-  # patronictl has no snap app wrapper (it is not in snapcraft.yaml's apps
-  # list -- only the patroni daemon is). Invoke it directly at its in-snap
-  # path with the same PYTHONPATH/LOCPATH env patroni.sh itself sets up,
-  # since patroni is a setuptools entry-point shim that needs its site
-  # tree on PYTHONPATH to import anything (Task 5's report).
-  PATRONICTL="${SNAP_CUR}/usr/bin/patronictl"
-  PYLIB=""
-  for d in "${SNAP_CUR}"/usr/lib/python3/dist-packages "${SNAP_CUR}"/usr/lib/python3.*/dist-packages; do
-    [ -d "${d}" ] && PYLIB="${PYLIB:+${PYLIB}:}${d}"
-  done
-  export PYTHONPATH="${PYLIB}"
-  export LOCPATH="${SNAP_CUR}/usr/lib/locale"
+  # patronictl runs as its own snap app so it uses the snap's python --
+  # a host interpreter pointed at the snap's site tree cannot import the
+  # C extensions (psycopg2 is built for core26's 3.13; CI-proven
+  # "No module named 'psycopg'" on the noble VM's 3.12).
+  PATRONICTL="percona-distribution-postgresql.patronictl"
 
   echo "Waiting for a Leader"
   ok=0
