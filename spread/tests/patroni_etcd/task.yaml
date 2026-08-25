@@ -2,10 +2,21 @@ summary: Patroni + etcd bootstrap to a running Leader
 
 prepare: |
   snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
-  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+  ok=0
+  for _ in $(seq 180); do
+    if [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; then
+      ok=1
+      break
+    fi
     echo "Waiting for postgres socket"
     sleep 1
   done
+  if [ "$ok" != 1 ]; then
+    echo "postgres socket never appeared; service state and logs follow"
+    snap services percona-distribution-postgresql || :
+    snap logs percona-distribution-postgresql -n 100 || :
+    exit 1
+  fi
 
 execute: |
   SNAP_CUR=/snap/percona-distribution-postgresql/current
