@@ -1,0 +1,20 @@
+# etcd configuration for the _NAME_ snap.
+# This file is seeded to /var/snap/_NAME_/current/etc/etcd.conf.yml on
+# install; edit it there and restart with:
+#   sudo snap restart _NAME_.etcd
+#
+# Single-node, localhost-only — no discovery config needed (see the etcd
+# app's usage: it backs Patroni's DCS for the patroni/etcd suite, not a
+# multi-node cluster).
+
+name: _NAME_
+data-dir: /var/snap/_NAME_/common/etcd
+
+listen-client-urls: http://127.0.0.1:2379
+advertise-client-urls: http://127.0.0.1:2379
+
+listen-peer-urls: http://127.0.0.1:2380
+initial-advertise-peer-urls: http://127.0.0.1:2380
+initial-cluster: _NAME_=http://127.0.0.1:2380
+initial-cluster-token: _NAME_-etcd
+initial-cluster-state: new

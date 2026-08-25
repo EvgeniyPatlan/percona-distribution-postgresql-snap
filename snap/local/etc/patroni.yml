@@ -1,0 +1,62 @@
+# Patroni configuration for the _NAME_ snap.
+# This file is seeded to /var/snap/_NAME_/current/etc/patroni.yml on
+# install; edit it there and restart with:
+#   sudo snap restart _NAME_.patroni
+#
+# Patroni manages its OWN postgres cluster (a scratch cluster under
+# common/patroni-data) rather than the auto-initialized `postgresql`
+# daemon's data directory — stop `_NAME_.postgresql` before starting
+# `_NAME_.patroni` and `_NAME_.etcd`, they are not meant to run together
+# against the same data directory.
+
+scope: _NAME_
+namespace: /_NAME_/
+name: postgresql0
+
+restapi:
+  listen: 127.0.0.1:8008
+  connect_address: 127.0.0.1:8008
+
+etcd3:
+  hosts: 127.0.0.1:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - local   all             all                                     peer
+    - host    all             all             127.0.0.1/32            scram-sha-256
+    - host    replication     replicator      127.0.0.1/32            scram-sha-256
+
+postgresql:
+  # 5433, not 5432: keeps this scratch cluster from colliding with the
+  # `postgresql` daemon app's port even if it was left running by mistake.
+  listen: 127.0.0.1:5433
+  connect_address: 127.0.0.1:5433
+  data_dir: /var/snap/_NAME_/common/patroni-data
+  bin_dir: /snap/_NAME_/current/usr/lib/postgresql/18/bin
+  pgpass: /var/snap/_NAME_/common/patroni-data/pgpass
+  authentication:
+    replication:
+      username: replicator
+      password: replicator-change-me
+    superuser:
+      username: snap_daemon
+      password: superuser-change-me
+  parameters:
+    unix_socket_directories: /var/snap/_NAME_/current/run
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
