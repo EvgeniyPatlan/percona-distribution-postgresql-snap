@@ -251,6 +251,14 @@ parts:
       - percona-pgpool2=1:4.7.2-2.resolute
       # Heavy: PostGIS + PL languages
       - percona-postgresql-18-postgis-3=2:3.5.7-3.resolute
+      # -postgis-3 ships only .so + major-version-suffixed .control
+      # stubs; -scripts ships the actual postgis--*.sql install/upgrade
+      # scripts AND the same .control files (transitively pulled by
+      # -postgis-3's Depends either way, dpkg-evidenced) -- staged
+      # explicitly now that Task 5's smoke proved it's load-bearing (see
+      # the packages-deb part's override-prime for the matching
+      # postinst-symlink fix `CREATE EXTENSION postgis` needs).
+      - percona-postgresql-18-postgis-3-scripts=2:3.5.7-3.resolute
       - percona-postgresql-plperl-18=3:18.6-1.resolute
       - percona-postgresql-plpython3-18=3:18.6-1.resolute
       - percona-postgresql-pltcl-18=3:18.6-1.resolute
@@ -433,6 +441,28 @@ parts:
       - -usr/lib/*/libtic.so*
       - -usr/lib/*/liburing-ffi.so*
       - -usr/lib/*/libutil.so*
+    override-prime: |
+      craftctl default
+      # percona-postgresql-18-postgis-3-scripts (transitively staged via
+      # -postgis-3's Depends, dpkg-evidenced) ships its .control files
+      # ONLY under the major-version-suffixed names (postgis-3.control,
+      # postgis_raster-3.control, ...) plus a postinst `update-alternatives`
+      # call that symlinks the plain names (postgis.control, ...) to them
+      # -- the exact same postinst-only-symlink class of bug as the
+      # pg_wrapper /usr/bin/psql finding (Task 4), which snapcraft's raw
+      # deb staging never runs. Without this, `CREATE EXTENSION postgis`
+      # fails with "extension \"postgis\" is not available" even though
+      # every .so and every postgis--*.sql install/upgrade script is
+      # present. Recreated by hand, matching the postinst's own
+      # `update-alternatives --install ... --slave ...` targets exactly
+      # (dpkg -e'd and read verbatim from the deb's own postinst script).
+      ln -sf postgis-3.control usr/share/postgresql/18/extension/postgis.control
+      ln -sf postgis_raster-3.control usr/share/postgresql/18/extension/postgis_raster.control
+      ln -sf postgis_sfcgal-3.control usr/share/postgresql/18/extension/postgis_sfcgal.control
+      ln -sf postgis_tiger_geocoder-3.control usr/share/postgresql/18/extension/postgis_tiger_geocoder.control
+      ln -sf postgis_topology-3.control usr/share/postgresql/18/extension/postgis_topology.control
+      ln -sf address_standardizer-3.control usr/share/postgresql/18/extension/address_standardizer.control
+      ln -sf address_standardizer_data_us-3.control usr/share/postgresql/18/extension/address_standardizer_data_us.control
   snap-license:
     plugin: dump
     source: .
