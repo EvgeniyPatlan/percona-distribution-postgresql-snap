@@ -35,8 +35,7 @@ execute: |
   ${CMD} -c "SELECT pg_switch_wal();" >/dev/null
   ok=0
   for _ in $(seq 15); do
-    FAILED=$(${CMD} -tAc "SELECT failed_count FROM pg_stat_archiver;")
-    if echo "${FAILED}" | grep -qx '0'; then
+    if ${CMD} -tAc "SELECT failed_count FROM pg_stat_archiver;" | grep -qx '0'; then
       ok=1
       break
     fi
