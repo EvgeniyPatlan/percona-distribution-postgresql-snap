@@ -374,5 +374,6 @@ parts:
       craftctl default
       sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' bin/*.sh
       sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.conf
+      sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.cfg
       sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.ini
       sed -i 's/_NAME_/$SNAPCRAFT_PROJECT_NAME/g' etc/*.yml
