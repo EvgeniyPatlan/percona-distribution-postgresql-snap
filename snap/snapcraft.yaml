@@ -333,9 +333,7 @@ parts:
       # overrides) that makes no sense inside a snap. perl's
       # etc/perl/Net/libnet.cfg (Net::Config defaults for FTP-family
       # modules) is dropped too — nothing in this snap uses those
-      # protocols. A further unused-library lint pass needs a real
-      # `snapcraft pack` build (out of scope here) and is ledgered as a
-      # follow-up rather than guessed at.
+      # protocols.
       - -etc/init.d
       - -etc/default
       - -etc/logrotate.d
@@ -358,6 +356,83 @@ parts:
       - -etc/pgbouncer
       - -etc/pgpool2
       - -etc/etcd
+      # Mute lint: unused libraries (real `snapcraft pack` build output,
+      # this repo's real baseline — see task-5-report.md). Verified via
+      # `grep -rl <libname>` across the primed usr/bin/usr/sbin/usr/lib
+      # tree for zero dlopen-style string references before adding each
+      # one; the handful with hits (libfreeblpriv3/libnssckbi/libnssdbm3/
+      # libsoftokn3/libpthread) are only referenced by other members of
+      # this same excluded NSS-crypto cluster or by glibc-internal
+      # consumers (libc.so.6, ldconfig) — the same libnss_*/libpthread/
+      # librt/libutil/libdl/libanl/libBrokenLocale/libnss_compat glibc
+      # compat-stub cluster every sibling repo in this family already
+      # excludes with no functional impact on getpwnam/setpriv lookups.
+      - -usr/lib/*/libBrokenLocale.so*
+      - -usr/lib/*/libabsl_civil_time.so*
+      - -usr/lib/*/libabsl_cordz_sample_token.so*
+      - -usr/lib/*/libabsl_crc_cpu_detect.so*
+      - -usr/lib/*/libabsl_die_if_null.so*
+      - -usr/lib/*/libabsl_failure_signal_handler.so*
+      - -usr/lib/*/libabsl_flags_marshalling.so*
+      - -usr/lib/*/libabsl_flags_parse.so*
+      - -usr/lib/*/libabsl_flags_usage.so*
+      - -usr/lib/*/libabsl_flags_usage_internal.so*
+      - -usr/lib/*/libabsl_generic_printer_internal.so*
+      - -usr/lib/*/libabsl_hashtable_profiler.so*
+      - -usr/lib/*/libabsl_log_entry.so*
+      - -usr/lib/*/libabsl_log_flags.so*
+      - -usr/lib/*/libabsl_log_initialize.so*
+      - -usr/lib/*/libabsl_log_internal_check_op.so*
+      - -usr/lib/*/libabsl_log_internal_conditions.so*
+      - -usr/lib/*/libabsl_log_internal_message.so*
+      - -usr/lib/*/libabsl_log_severity.so*
+      - -usr/lib/*/libabsl_periodic_sampler.so*
+      - -usr/lib/*/libabsl_poison.so*
+      - -usr/lib/*/libabsl_profile_builder.so*
+      - -usr/lib/*/libabsl_random_distributions.so*
+      - -usr/lib/*/libabsl_random_internal_distribution_test_util.so*
+      - -usr/lib/*/libabsl_random_internal_entropy_pool.so*
+      - -usr/lib/*/libabsl_random_seed_sequences.so*
+      - -usr/lib/*/libabsl_scoped_set_env.so*
+      - -usr/lib/*/libabsl_status.so*
+      - -usr/lib/*/libabsl_statusor.so*
+      - -usr/lib/*/libabsl_vlog_config_internal.so*
+      - -usr/lib/*/libanl.so*
+      - -usr/lib/*/libboost_wserialization.so*
+      - -usr/lib/*/libc_malloc_debug.so*
+      - -usr/lib/*/libdl.so*
+      - -usr/lib/*/libdrop_ambient.so*
+      - -usr/lib/*/libexpatw.so*
+      - -usr/lib/*/libexslt.so*
+      - -usr/lib/*/libformw.so*
+      - -usr/lib/*/libfreebl3.so*
+      - -usr/lib/*/libfreeblpriv3.so*
+      - -usr/lib/*/libhistory.so*
+      - -usr/lib/*/libhwy_contrib.so*
+      - -usr/lib/*/libhwy_test.so*
+      - -usr/lib/*/libicuio.so*
+      - -usr/lib/*/libicutest.so*
+      - -usr/lib/*/libicutu.so*
+      - -usr/lib/*/liblua5.3-c++.so*
+      - -usr/lib/*/libmemusage.so*
+      - -usr/lib/*/libmenuw.so*
+      - -usr/lib/*/libnsl.so*
+      - -usr/lib/*/libnss_compat.so*
+      - -usr/lib/*/libnss_dns.so*
+      - -usr/lib/*/libnss_files.so*
+      - -usr/lib/*/libnss_hesiod.so*
+      - -usr/lib/*/libnssckbi.so*
+      - -usr/lib/*/libnssdbm3.so*
+      - -usr/lib/*/libpamc.so*
+      - -usr/lib/*/libpcprofile.so*
+      - -usr/lib/*/libpthread.so*
+      - -usr/lib/*/librt.so*
+      - -usr/lib/*/libsoftokn3.so*
+      - -usr/lib/*/libssl3.so*
+      - -usr/lib/*/libthread_db.so*
+      - -usr/lib/*/libtic.so*
+      - -usr/lib/*/liburing-ffi.so*
+      - -usr/lib/*/libutil.so*
   snap-license:
     plugin: dump
     source: .
