@@ -101,6 +101,15 @@ hooks:
   install: {}
   configure: {}
 
+# pgbadger is a perl script whose #!/usr/bin/perl shebang resolves inside
+# the base snap -- core26 ships no perl, so exec fails with ENOENT under
+# real confinement even though perl itself is staged (CI-proven; the
+# percona-distribution-mysql-ps/-pxc snaps use this same bind for their
+# pt-* tools).
+layout:
+  /usr/bin/perl:
+    bind-file: $SNAP/usr/bin/perl
+
 apps:
   postgresql:
     command: bin/postgresql.sh
@@ -125,6 +134,10 @@ apps:
     plugs:
       - network
       - network-bind
+  patronictl:
+    command: bin/patronictl.sh
+    plugs:
+      - network
   etcd:
     command: bin/etcd.sh
     daemon: simple
