@@ -28,7 +28,7 @@ jobs:
 
   test:
     name: Test snap | ${{ matrix.base.version }} ${{ matrix.platform.arch }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     runs-on: "ubuntu-${{ matrix.base.version }}${{ matrix.platform.gh_suffix }}"
     permissions: {}
     strategy:

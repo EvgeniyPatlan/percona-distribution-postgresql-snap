@@ -34,12 +34,18 @@ execute: |
   EOF
   grep -q "sr_check_user = 'pooluser'" "${ETC}/pgpool.conf"
 
+  echo "Creating the pgpool key file (the running daemon's wrapper exports"
+  echo "PGPOOLKEYFILE at this fixed path -- pg_enc must use the SAME key)"
+  printf 'pgpoolkey' > "${COMMON}/pgpool.key"
+  chmod 0600 "${COMMON}/pgpool.key"
+  chown snap_daemon:root "${COMMON}/pgpool.key"
+
   echo "Generating the pool_passwd entry (pg_enc, not pg_md5 -- backend needs scram)"
   # pg_enc has no snap app wrapper; invoke it directly at its in-snap path,
   # matching the exact form Task 5's smoke verified working.
   PGPOOLKEYFILE="${COMMON}/pgpool.key" "${SNAP_CUR}/usr/sbin/pg_enc" -m -u pooluser \
     -f "${ETC}/pgpool.conf" 'PoolUser123!'
-  chown snap_daemon:root "${COMMON}/pgpool.key" "${ETC}/pool_passwd"
+  chown snap_daemon:root "${ETC}/pool_passwd"
 
   echo "Starting pgpool"
   snap start percona-distribution-postgresql.pgpool

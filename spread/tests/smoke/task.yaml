@@ -29,6 +29,21 @@ execute: |
   echo "Preloaded extension quartet"
   ${CMD} -tAc "SHOW shared_preload_libraries;" | grep -q "pg_tde,pg_stat_monitor,pgaudit,pg_cron"
 
+  echo "Archiver guard: no stanza exists on a default install, so"
+  echo "archive_command (postgresql.conf) must be a silent no-op -- zero"
+  echo "archiver failures even after a real WAL switch"
+  ${CMD} -c "SELECT pg_switch_wal();" >/dev/null
+  ok=0
+  for _ in $(seq 15); do
+    FAILED=$(${CMD} -tAc "SELECT failed_count FROM pg_stat_archiver;")
+    if echo "${FAILED}" | grep -qx '0'; then
+      ok=1
+      break
+    fi
+    sleep 2
+  done
+  [ "$ok" = 1 ]
+
   echo "CRUD"
   ${CMD} -c "CREATE TABLE smoke_probe (id INT PRIMARY KEY, v TEXT);"
   ${CMD} -c "INSERT INTO smoke_probe VALUES (1, 'hello');"
@@ -42,12 +57,12 @@ execute: |
   echo "pg_tde: file keyring -> principal key -> tde_heap -> insert/select"
   # Task 5's report: pg_tde's real 3-call flow (add provider, create key,
   # THEN set key -- skipping the create step fails with "key ... does not
-  # exist"). The keyring directory is not seeded by the install hook, so
-  # this suite creates it itself, owned by snap_daemon (the postgres
-  # server process's own uid, per postgresql.sh) since pg_tde writes the
-  # keyring file from inside the server, not from the psql client.
-  mkdir -p "${KEYRING_DIR}"
-  chown snap_daemon:root "${KEYRING_DIR}"
+  # exist"). The keyring directory is now seeded by the install hook
+  # itself (owned by snap_daemon, the postgres server process's own uid,
+  # since pg_tde writes the keyring file from inside the server, not from
+  # the psql client) -- assert it exists rather than create it here, to
+  # prove the HOOK does it and catch a regression if that seeding breaks.
+  test -d "${KEYRING_DIR}" || { echo "FAIL: hook did not seed ${KEYRING_DIR}"; exit 1; }
   ${CMD} -c "CREATE EXTENSION pg_tde;"
   ${CMD} -c "SELECT pg_tde_add_global_key_provider_file('file-keyring', '${KEYRING_DIR}/keyring');"
   ${CMD} -c "SELECT pg_tde_create_key_using_global_key_provider('principal-key', 'file-keyring');"
