@@ -1,0 +1,35 @@
+summary: Percona Distribution for PostgreSQL upgrade tests
+
+# TODO(release): remove `manual` once percona-distribution-postgresql is published to 18/edge
+manual: true
+
+prepare: |
+  snap install percona-distribution-postgresql --channel 18/edge
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  echo "Creating test data..."
+
+  CMD="percona-distribution-postgresql.psql"
+
+  ${CMD} --command="
+    CREATE TABLE test_db (id SERIAL PRIMARY KEY, name TEXT);
+    INSERT INTO test_db (name) VALUES ('test1');
+    SELECT * FROM test_db;
+  "
+
+  echo "Upgrading to local snap..."
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+  echo "Checking test data after installation..."
+  ${CMD} --command="SELECT * FROM test_db;"
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

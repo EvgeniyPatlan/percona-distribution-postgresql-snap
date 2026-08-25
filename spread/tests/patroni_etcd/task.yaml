@@ -1,0 +1,81 @@
+summary: Patroni + etcd bootstrap to a running Leader
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  SNAP_CUR=/snap/percona-distribution-postgresql/current
+  ETC=/var/snap/percona-distribution-postgresql/current/etc
+
+  # Patroni manages its OWN scratch cluster (patroni.yml: data_dir under
+  # common/patroni-data, port 5433) and is not meant to run against the
+  # same data directory as the main postgresql daemon -- stop it first.
+  echo "Stopping the main postgresql daemon"
+  snap stop percona-distribution-postgresql.postgresql
+
+  echo "Starting etcd"
+  snap start percona-distribution-postgresql.etcd
+  ok=0
+  for _ in $(seq 30); do
+    curl -s http://127.0.0.1:2379/health | grep -q '"health":"true"' && { ok=1; break; }
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: etcd health check failed ==="
+    snap logs percona-distribution-postgresql.etcd -n 50 || true
+    ss -ltn | grep 2379 || true
+  fi
+  [ "$ok" = 1 ]
+
+  echo "Starting patroni"
+  snap start percona-distribution-postgresql.patroni
+
+  # patronictl has no snap app wrapper (it is not in snapcraft.yaml's apps
+  # list -- only the patroni daemon is). Invoke it directly at its in-snap
+  # path with the same PYTHONPATH/LOCPATH env patroni.sh itself sets up,
+  # since patroni is a setuptools entry-point shim that needs its site
+  # tree on PYTHONPATH to import anything (Task 5's report).
+  PATRONICTL="${SNAP_CUR}/usr/bin/patronictl"
+  PYLIB=""
+  for d in "${SNAP_CUR}"/usr/lib/python3/dist-packages "${SNAP_CUR}"/usr/lib/python3.*/dist-packages; do
+    [ -d "${d}" ] && PYLIB="${PYLIB:+${PYLIB}:}${d}"
+  done
+  export PYTHONPATH="${PYLIB}"
+  export LOCPATH="${SNAP_CUR}/usr/lib/locale"
+
+  echo "Waiting for a Leader"
+  ok=0
+  for _ in $(seq 60); do
+    if "${PATRONICTL}" -c "${ETC}/patroni.yml" list 2>/dev/null | grep -q "Leader"; then
+      ok=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: patroni did not reach Leader ==="
+    "${PATRONICTL}" -c "${ETC}/patroni.yml" list || true
+    echo "--- patroni log tail ---"
+    snap logs percona-distribution-postgresql.patroni -n 80 || true
+    echo "--- etcd log tail ---"
+    snap logs percona-distribution-postgresql.etcd -n 50 || true
+  fi
+  [ "$ok" = 1 ]
+
+  echo "Leader is actually serving queries (patroni.yml: superuser snap_daemon, TCP scram)"
+  PGPASSWORD='superuser-change-me' timeout 5 percona-distribution-postgresql.psql \
+    -h 127.0.0.1 -p 5433 -U snap_daemon -d postgres -tAc "SELECT 1;" | grep -q '^1$'
+
+restore: |
+  timeout 60 snap stop percona-distribution-postgresql.patroni || true
+  # Task 5's report: patroni's own control-plane process does not exit
+  # promptly on SIGTERM (20+ seconds of no further log activity under
+  # direct-exec, needed kill -9 to reap) -- fall back to a hard kill so
+  # this restore never blocks on the daemon's own stop handling.
+  pkill -9 -f "/usr/bin/patroni" || true
+  snap stop percona-distribution-postgresql.etcd || true
+  snap remove percona-distribution-postgresql --purge --terminate || true

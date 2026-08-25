@@ -1,0 +1,83 @@
+summary: HAProxy L4 frontend for postgres, with a stats-socket UP assertion
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  CMD="percona-distribution-postgresql.psql"
+  ETC=/var/snap/percona-distribution-postgresql/current/etc
+
+  echo "Creating a scram role for the proxied connection"
+  ${CMD} -c "CREATE ROLE haptest LOGIN PASSWORD 'HapTest123!';"
+
+  echo "Installing a suite-owned haproxy.cfg: plain L4 connect check, no httpchk"
+  # A plain TCP connect check against postgres itself, NOT a protocol-aware
+  # check (option pgsql-check) -- percona-distribution-mysql-pxc-snap's
+  # haproxy_service suite documents the exact failure mode of pairing an
+  # httpchk-style check with a script-based health responder (a lost
+  # TCP-close race). An L4 check only needs the handshake to succeed.
+  # Stats socket is TCP (127.0.0.1:9000), not a unix socket, so this suite
+  # can query it with bash's own /dev/tcp -- no socat, no nc.
+  cat >"${ETC}/haproxy.cfg" <<'EOF'
+  global
+      maxconn 1024
+      stats socket 127.0.0.1:9000 level admin
+      log stderr format raw local0 info
+
+  defaults
+      mode tcp
+      log global
+      option tcplog
+      timeout connect 10s
+      timeout client 1m
+      timeout server 1m
+      timeout check 10s
+
+  frontend postgres-front
+      bind 127.0.0.1:5000
+      default_backend postgres-back
+
+  backend postgres-back
+      option log-health-checks
+      server node1 127.0.0.1:5432 check inter 2s downinter 2s rise 2 fall 3
+  EOF
+  grep -q "server node1 127.0.0.1:5432 check" "${ETC}/haproxy.cfg"
+
+  echo "Starting haproxy"
+  snap start percona-distribution-postgresql.haproxy
+
+  echo "Round-trip through the frontend"
+  ok=0
+  for _ in $(seq 60); do
+    if PGPASSWORD='HapTest123!' timeout 5 ${CMD} -h 127.0.0.1 -p 5000 -U haptest -d postgres \
+        -tAc "SELECT 1;" 2>/dev/null | grep -q '^1$'; then
+      ok=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: psql-through-haproxy loop exhausted ==="
+    echo "--- listening sockets (5432/5000/9000) ---"
+    ss -ltn | grep -E '5432|5000|9000' || true
+    echo "--- one unmasked psql attempt ---"
+    PGPASSWORD='HapTest123!' timeout 5 ${CMD} -h 127.0.0.1 -p 5000 -U haptest -d postgres \
+      -tAc "SELECT 1;" || echo "psql rc=$?"
+    echo "--- haproxy log tail ---"
+    snap logs percona-distribution-postgresql.haproxy -n 40 || true
+  fi
+  [ "$ok" = 1 ]
+
+  echo "Backend reported UP on the stats socket"
+  exec 3<>/dev/tcp/127.0.0.1/9000
+  printf 'show stat\r\n' >&3
+  STATS=$(timeout 5 cat <&3)
+  exec 3<&-
+  echo "${STATS}" | grep "postgres-back" | grep -q ",UP,"
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

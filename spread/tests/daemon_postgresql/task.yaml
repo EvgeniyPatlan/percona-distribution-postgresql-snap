@@ -1,0 +1,53 @@
+summary: postgresql daemon restart, data survival, and ALTER SYSTEM tolerance
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  CMD="percona-distribution-postgresql.psql"
+  SOCK=/var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432
+
+  echo "Creating test data"
+  ${CMD} -c "CREATE TABLE daemon_probe (id INT PRIMARY KEY, v TEXT);"
+  ${CMD} -c "INSERT INTO daemon_probe VALUES (1, 'survives');"
+
+  echo "ALTER SYSTEM (rewrites postgresql.auto.conf inside PGDATA)"
+  ${CMD} -c "ALTER SYSTEM SET work_mem = '16MB';"
+
+  echo "Stopping percona-distribution-postgresql.postgresql"
+  # Task 5's report: postgres does a smart shutdown and will not terminate
+  # while any client session is alive -- this suite's psql invocations
+  # above have already closed their connections, so this is expected to
+  # complete well inside the app's 5m stop-timeout.
+  snap stop percona-distribution-postgresql.postgresql
+  until [ ! -S "${SOCK}" ]; do
+    echo "Waiting for postgres socket to be removed"
+    sleep 1
+  done
+  ${CMD} -c "SELECT 1;" &>/dev/null || :
+  snap services percona-distribution-postgresql.postgresql | grep -q inactive
+
+  echo "Starting percona-distribution-postgresql.postgresql"
+  snap start percona-distribution-postgresql.postgresql
+  until [ -S "${SOCK}" ]; do
+    echo "Waiting for postgres socket to be created"
+    sleep 1
+  done
+  ${CMD} -c "SELECT 1;" &>/dev/null
+  snap services percona-distribution-postgresql.postgresql | grep -q " active"
+
+  echo "Data survived the restart"
+  ${CMD} -tAc "SELECT v FROM daemon_probe WHERE id = 1;" | grep -q survives
+
+  echo "ALTER SYSTEM setting tolerated the restart (postgresql.auto.conf honored)"
+  ${CMD} -tAc "SHOW work_mem;" | grep -q "16MB"
+
+  ${CMD} -c "DROP TABLE daemon_probe;"
+  ${CMD} -c "ALTER SYSTEM RESET work_mem;"
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

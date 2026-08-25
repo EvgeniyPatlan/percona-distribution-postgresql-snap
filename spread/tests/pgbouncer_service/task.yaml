@@ -1,0 +1,56 @@
+summary: PgBouncer pooled connection round-trip via a scram role
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  CMD="percona-distribution-postgresql.psql"
+  ETC=/var/snap/percona-distribution-postgresql/current/etc
+
+  echo "Creating a scram role for the pooled connection"
+  ${CMD} -c "CREATE ROLE pooltest LOGIN PASSWORD 'PoolTest123!';"
+
+  echo "Adding the role's scram secret to pgbouncer's userlist"
+  SECRET=$(${CMD} -tAc "SELECT rolpassword FROM pg_authid WHERE rolname = 'pooltest';")
+  echo "\"pooltest\" \"${SECRET}\"" >"${ETC}/pgbouncer-userlist.txt"
+  grep -q '"pooltest"' "${ETC}/pgbouncer-userlist.txt"
+
+  echo "Wiring a live [databases] entry routed over TCP, not the unix socket"
+  # pg_hba.conf's "local ... peer" line only ever matches the snap_daemon
+  # superuser by OS username -- any other scram role's pgbouncer backend
+  # connection must go over TCP to hit the "host ... scram-sha-256" line
+  # instead (Task 5's Finding #5).
+  sed -i '/^\[databases\]/a postgres = host=127.0.0.1 port=5432 dbname=postgres' "${ETC}/pgbouncer.ini"
+  grep -q "^postgres = host=127.0.0.1 port=5432 dbname=postgres" "${ETC}/pgbouncer.ini"
+
+  echo "Starting pgbouncer"
+  snap start percona-distribution-postgresql.pgbouncer
+
+  echo "Pooled round-trip through 6432"
+  ok=0
+  for _ in $(seq 30); do
+    if PGPASSWORD='PoolTest123!' timeout 5 ${CMD} -h 127.0.0.1 -p 6432 -U pooltest -d postgres \
+        -tAc "SELECT current_user, current_database();" 2>/dev/null | grep -q "pooltest|postgres"; then
+      ok=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: pooled round-trip loop exhausted ==="
+    echo "--- listening sockets (6432) ---"
+    ss -ltn | grep 6432 || true
+    echo "--- one unmasked psql attempt ---"
+    PGPASSWORD='PoolTest123!' timeout 5 ${CMD} -h 127.0.0.1 -p 6432 -U pooltest -d postgres \
+      -tAc "SELECT current_user, current_database();" || echo "psql rc=$?"
+    echo "--- pgbouncer log tail ---"
+    snap logs percona-distribution-postgresql.pgbouncer -n 40 || true
+  fi
+  [ "$ok" = 1 ]
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

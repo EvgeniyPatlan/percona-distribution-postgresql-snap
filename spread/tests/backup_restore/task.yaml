@@ -1,0 +1,57 @@
+summary: pgBackRest stanza-create / backup / restore round-trip
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  CMD="percona-distribution-postgresql.psql"
+  BR="percona-distribution-postgresql.pgbackrest"
+  DATA=/var/snap/percona-distribution-postgresql/common/data
+
+  echo "Creating test data"
+  ${CMD} -c "CREATE TABLE bkp_probe (id INT PRIMARY KEY, v TEXT);"
+  ${CMD} -c "INSERT INTO bkp_probe VALUES (1, 'precious');"
+
+  echo "Creating the pgbackrest stanza"
+  # PGBACKREST_CONFIG is declared on the pgbackrest app's own environment:
+  # stanza in snapcraft.yaml, so --config is never needed here.
+  timeout 60 ${BR} --stanza=main stanza-create
+
+  echo "Taking a full backup"
+  # Task 5's report measured ~2 minutes in-container for a small (~30 MB)
+  # database (WAL archive-push + checksum-scan overhead); budget generously.
+  timeout 300 ${BR} --stanza=main --type=full backup
+
+  echo "Verifying backup info"
+  timeout 30 ${BR} --stanza=main info | grep -q "status: ok"
+
+  echo "Simulating data loss"
+  snap stop percona-distribution-postgresql.postgresql
+  rm -rf "${DATA:?}"/*
+
+  echo "Restoring from the pgbackrest repo"
+  timeout 300 ${BR} --stanza=main restore
+
+  echo "Starting postgres against the restored data directory"
+  snap start percona-distribution-postgresql.postgresql
+  ok=0
+  for _ in $(seq 60); do
+    percona-distribution-postgresql.pg-isready -q && { ok=1; break; }
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: postgres did not come back up after restore ==="
+    snap logs percona-distribution-postgresql.postgresql -n 80 || true
+    ls -la "${DATA}" || true
+  fi
+  [ "$ok" = 1 ]
+
+  echo "Verifying data is intact after restore"
+  ${CMD} -tAc "SELECT v FROM bkp_probe WHERE id = 1;" | grep -q precious
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true

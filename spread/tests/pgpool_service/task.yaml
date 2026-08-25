@@ -1,0 +1,62 @@
+summary: Pgpool-II basic proxy round-trip via 9999
+
+prepare: |
+  snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
+  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+    echo "Waiting for postgres socket"
+    sleep 1
+  done
+
+execute: |
+  CMD="percona-distribution-postgresql.psql"
+  ETC=/var/snap/percona-distribution-postgresql/current/etc
+  COMMON=/var/snap/percona-distribution-postgresql/common
+  SNAP_CUR=/snap/percona-distribution-postgresql/current
+
+  echo "Creating a check/pool role"
+  ${CMD} -c "CREATE ROLE pooluser LOGIN PASSWORD 'PoolUser123!';"
+
+  echo "Wiring sr_check_user/health_check_user (Task 5's Finding #6: pgpool"
+  echo "cannot authenticate to the backend at all without these)"
+  cat >>"${ETC}/pgpool.conf" <<'EOF'
+  sr_check_user = 'pooluser'
+  sr_check_password = 'PoolUser123!'
+  health_check_user = 'pooluser'
+  health_check_password = 'PoolUser123!'
+  EOF
+  grep -q "sr_check_user = 'pooluser'" "${ETC}/pgpool.conf"
+
+  echo "Generating the pool_passwd entry (pg_enc, not pg_md5 -- backend needs scram)"
+  # pg_enc has no snap app wrapper; invoke it directly at its in-snap path,
+  # matching the exact form Task 5's smoke verified working.
+  PGPOOLKEYFILE="${COMMON}/pgpool.key" "${SNAP_CUR}/usr/sbin/pg_enc" -m -u pooluser \
+    -f "${ETC}/pgpool.conf" 'PoolUser123!'
+  chown snap_daemon:root "${COMMON}/pgpool.key" "${ETC}/pool_passwd"
+
+  echo "Starting pgpool"
+  snap start percona-distribution-postgresql.pgpool
+
+  echo "Round-trip through 9999"
+  ok=0
+  for _ in $(seq 60); do
+    if PGPASSWORD='PoolUser123!' timeout 5 ${CMD} -h 127.0.0.1 -p 9999 -U pooluser -d postgres \
+        -tAc "SELECT current_user, 1 + 1;" 2>/dev/null | grep -q "pooluser|2"; then
+      ok=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$ok" != 1 ]; then
+    echo "=== FORENSICS: pgpool round-trip loop exhausted ==="
+    echo "--- listening sockets (9999) ---"
+    ss -ltn | grep 9999 || true
+    echo "--- one unmasked psql attempt ---"
+    PGPASSWORD='PoolUser123!' timeout 5 ${CMD} -h 127.0.0.1 -p 9999 -U pooluser -d postgres \
+      -tAc "SELECT current_user, 1 + 1;" || echo "psql rc=$?"
+    echo "--- pgpool log tail ---"
+    snap logs percona-distribution-postgresql.pgpool -n 40 || true
+  fi
+  [ "$ok" = 1 ]
+
+restore: |
+  snap remove percona-distribution-postgresql --purge --terminate || true
