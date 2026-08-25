@@ -318,6 +318,58 @@ CRAFT_ARTIFACT=$(pwd)/percona-distribution-postgresql_<version>_amd64.snap sprea
 (`spread` from `go install github.com/canonical/spread/cmd/spread@latest`;
 needs the `lxd` snap.)
 
+## Updating to a new Percona release
+
+`scripts/bump-version.sh` checks every exact-pinned package in
+`snap/snapcraft.yaml` against the apt index declared under
+`package-repositories`, and bumps any pin (and the top-level `version:`
+field, derived from the `percona-postgresql-<major>` pin) that is out of
+date. Each branch's pins resolve from that branch's own apt repository
+(`ppg-18` on `18/edge`, `ppg-17` on `17/edge`), a single `main` component —
+there is no multi-component precedence to worry about here, unlike some
+sibling repos in this family.
+
+### Automated
+
+The `Update check` workflow (`.github/workflows/update-check.yaml`) runs
+weekly and, for each `*/edge` branch, runs the same script and opens a pull
+request per branch that has an available update. Because this repo
+publishes two supported majors as two long-lived branches/tracks (`18/edge`,
+`17/edge`), a real upstream release round can produce **one PR per track
+branch** — each targets its own branch and is independent of the other. The
+PR:
+
+- touches only `snap/snapcraft.yaml`, with the pin diff as the commit;
+- contains the script's summary table (old/new version per package) in its
+  description;
+- is verified the same way any other PR is: CI (`Tests`) builds the snap for
+  `amd64` and `arm64` and runs the full spread suite against it.
+
+To trigger an immediate check instead of waiting for the weekly run, start
+the `Update check` workflow manually from the Actions tab (`workflow_dispatch`,
+optionally scoped to one branch via the `branch` input).
+
+If a bump PR is closed without merging, its `bump/<track>-<version>` branch
+is left behind and that exact version is skipped on every future run until
+the branch is deleted (or a newer version ships) — delete the branch if you
+want the check retried for that version.
+
+### Manual
+
+```
+./scripts/bump-version.sh
+git diff
+```
+
+Review the diff, then commit and push as usual.
+
+### Scope
+
+The script only updates pins within the current branch's track (`18` on
+`18/edge`, `17` on `17/edge`). A new Percona major version means a new
+track/branch and its own `repo.percona.com/ppg-<NN>/apt` repository — that's
+a manual, one-time setup, not something this script does.
+
 ## License
 
 The snap packaging is Apache-2.0 (see `LICENSE`). Upstream component
