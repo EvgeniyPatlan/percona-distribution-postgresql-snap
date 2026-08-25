@@ -2,10 +2,21 @@ summary: postgresql daemon restart, data survival, and ALTER SYSTEM tolerance
 
 prepare: |
   snap install "${SPREAD_PATH}/$(basename "${CRAFT_ARTIFACT}")" --dangerous --jailmode
-  until [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; do
+  ok=0
+  for _ in $(seq 180); do
+    if [ -S /var/snap/percona-distribution-postgresql/current/run/.s.PGSQL.5432 ]; then
+      ok=1
+      break
+    fi
     echo "Waiting for postgres socket"
     sleep 1
   done
+  if [ "$ok" != 1 ]; then
+    echo "postgres socket never appeared; service state and logs follow"
+    snap services percona-distribution-postgresql || :
+    snap logs percona-distribution-postgresql -n 100 || :
+    exit 1
+  fi
 
 execute: |
   CMD="percona-distribution-postgresql.psql"
@@ -32,19 +43,36 @@ execute: |
   # above have already closed their connections, so this is expected to
   # complete well inside the app's 5m stop-timeout.
   snap stop percona-distribution-postgresql.postgresql
-  until [ ! -S "${SOCK}" ]; do
+  ok=0
+  for _ in $(seq 60); do
+    if [ ! -S "${SOCK}" ]; then
+      ok=1
+      break
+    fi
     echo "Waiting for postgres socket to be removed"
     sleep 1
   done
+  [ "$ok" = 1 ]
   ${CMD} -c "SELECT 1;" &>/dev/null || :
   snap services percona-distribution-postgresql.postgresql | grep -q inactive
 
   echo "Starting percona-distribution-postgresql.postgresql"
   snap start percona-distribution-postgresql.postgresql
-  until [ -S "${SOCK}" ]; do
+  ok=0
+  for _ in $(seq 60); do
+    if [ -S "${SOCK}" ]; then
+      ok=1
+      break
+    fi
     echo "Waiting for postgres socket to be created"
     sleep 1
   done
+  if [ "$ok" != 1 ]; then
+    echo "postgres socket never came back; service state and logs follow"
+    snap services percona-distribution-postgresql || :
+    snap logs percona-distribution-postgresql -n 100 || :
+    exit 1
+  fi
   # Socket presence is not the same as "ready to accept connections" --
   # a query landing in that window dies with "FATAL: the database system
   # is starting up". Bounded ok-flag retry, same idiom as every other
