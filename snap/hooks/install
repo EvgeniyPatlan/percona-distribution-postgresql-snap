@@ -16,21 +16,27 @@ set -euo pipefail
 mkdir -p -m 0700 "${SNAP_COMMON}/data"
 chown snap_daemon:root "${SNAP_COMMON}/data"
 
-# Log / etcd / pgbackrest-repo / patroni-scratch-cluster directories.
+# Log / etcd / pgbackrest-repo / patroni-scratch-cluster / TDE keyring
+# directories.
 mkdir -p -m 0770 \
     "${SNAP_COMMON}/log" \
     "${SNAP_COMMON}/etcd" \
     "${SNAP_COMMON}/pgbackrest" \
-    "${SNAP_COMMON}/patroni-data"
+    "${SNAP_COMMON}/patroni-data" \
+    "${SNAP_COMMON}/pg_tde_keyring"
 chown -R snap_daemon:root \
     "${SNAP_COMMON}/log" \
     "${SNAP_COMMON}/etcd" \
     "${SNAP_COMMON}/pgbackrest" \
-    "${SNAP_COMMON}/patroni-data"
+    "${SNAP_COMMON}/patroni-data" \
+    "${SNAP_COMMON}/pg_tde_keyring"
 
-# Config (etc) and socket (run) directories under SNAP_DATA. etc/postgresql
-# is the one nested pair (postgresql.conf + pg_hba.conf); every other
-# template is seeded flat into etc/.
+# Config (etc) and socket (run) directories under SNAP_DATA. Mode is baked
+# in at mkdir time (one-touch rule) -- etc holds secret-bearing templates
+# (patroni.yml, pgbouncer-userlist.txt) that must never be world-readable.
+# etc/postgresql is the one nested pair (postgresql.conf + pg_hba.conf);
+# every other template is seeded flat into etc/.
+mkdir -p -m 0750 "${SNAP_DATA}/etc"
 mkdir -p -m 0750 "${SNAP_DATA}/etc/postgresql"
 mkdir -p -m 0770 "${SNAP_DATA}/run"
 

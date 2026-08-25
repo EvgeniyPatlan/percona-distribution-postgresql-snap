@@ -63,7 +63,8 @@ description: |
       (PCP admin on :9898); config at .../current/etc/pgpool.conf, wired
       to this snap's own postgres on 5432 by default. Needs sr_check_user/
       health_check_user and a pool_passwd entry (usr/sbin/pg_enc, not
-      pg_md5 — backend needs scram) before it proxies; see pgpool.conf.
+      pg_md5 — backend needs scram) before it proxies, keyed with
+      .../common/pgpool.key (also the daemon's own key); see pgpool.conf.
 
   Ops CLIs: pgbackrest (config at .../current/etc/pgbackrest.conf, repo
   under .../common/pgbackrest), pgbadger (point it at a log file under
@@ -105,6 +106,8 @@ apps:
     command: bin/postgresql.sh
     daemon: simple
     stop-timeout: 5m
+    environment:
+      PGBACKREST_CONFIG: $SNAP_DATA/etc/pgbackrest.conf
     plugs:
       - network
       - network-bind
