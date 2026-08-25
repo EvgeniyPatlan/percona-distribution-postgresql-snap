@@ -1,7 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-mapfile -t EXTRA_ARGS < <(snapctl get pgpool-args 2>/dev/null || true)
+# Under real snapd, `snapctl get` on an unset key prints one EMPTY line
+# (an absent snapctl prints nothing), and a bare mapfile would hand the
+# daemon a literal "" argument that aborts it at exec. Filter empty lines.
+EXTRA_ARGS=()
+while IFS= read -r arg; do
+    if [ -n "${arg}" ]; then
+        EXTRA_ARGS+=("${arg}")
+    fi
+done < <(snapctl get pgpool-args 2>/dev/null || true)
 
 # pgpool decrypts pool_passwd's AES-encrypted entries (written by
 # usr/sbin/pg_enc -m) using this key file; without it the running daemon
