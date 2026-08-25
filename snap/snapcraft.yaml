@@ -61,7 +61,9 @@ description: |
       — uncomment the example, which points at this snap's own postgres).
     .pgpool — connection pooling/load balancing; listens on 127.0.0.1:9999
       (PCP admin on :9898); config at .../current/etc/pgpool.conf, wired
-      to this snap's own postgres on 5432 by default.
+      to this snap's own postgres on 5432 by default. Needs sr_check_user/
+      health_check_user and a pool_passwd entry (usr/sbin/pg_enc, not
+      pg_md5 — backend needs scram) before it proxies; see pgpool.conf.
 
   Ops CLIs: pgbackrest (config at .../current/etc/pgbackrest.conf, repo
   under .../common/pgbackrest), pgbadger (point it at a log file under
