@@ -67,11 +67,24 @@ mkdir -p -m 0770 "${SNAP_DATA}/run"
 
 chown -R snap_daemon:root "${SNAP_DATA}/etc" "${SNAP_DATA}/run"
 
+# The data dir is 0700 snap_daemon-owned and the confined hook's root has
+# no dac_read_search capability, so a root-side test -f cannot see inside
+# it (CI-proven under jailmode: initdb succeeds, then a root-run probe
+# still reports PG_VERSION absent). Probe as the owner instead.
+pg_version_present() {
+    "${SNAP}/usr/bin/setpriv" \
+        --clear-groups \
+        --reuid snap_daemon \
+        --regid snap_daemon \
+        -- \
+        test -f "${SNAP_COMMON}/data/PG_VERSION"
+}
+
 # initdb runs AS the owner (setpriv-as-snap_daemon) after every chown above
 # has already handed the data directory to snap_daemon -- this is an
 # owner-run op, exempt from the one-touch rule, not a second root-side
 # mutation. Guarded so a refresh (data dir already initialized) is a no-op.
-if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
+if ! pg_version_present; then
     "${SNAP}/usr/bin/setpriv" \
         --clear-groups \
         --reuid snap_daemon \
@@ -84,7 +97,7 @@ if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
         --auth-host=scram-sha-256 \
         --encoding=UTF8
 
-    if [ ! -f "${SNAP_COMMON}/data/PG_VERSION" ]; then
+    if ! pg_version_present; then
         echo "Error: initdb did not produce a data directory at ${SNAP_COMMON}/data (no PG_VERSION file)." >&2
         exit 1
     fi
