@@ -13,6 +13,14 @@ execute: |
   COMMON=/var/snap/percona-distribution-postgresql/common
   SNAP_CUR=/snap/percona-distribution-postgresql/current
 
+  echo "Wait for postgres to accept connections (app-level, not just socket presence)"
+  ok=0
+  for _ in $(seq 30); do
+    percona-distribution-postgresql.pg-isready -q && { ok=1; break; }
+    sleep 2
+  done
+  [ "$ok" = 1 ]
+
   echo "Creating a check/pool role"
   ${CMD} -c "CREATE ROLE pooluser LOGIN PASSWORD 'PoolUser123!';"
 

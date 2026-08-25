@@ -12,6 +12,14 @@ execute: |
   BR="percona-distribution-postgresql.pgbackrest"
   DATA=/var/snap/percona-distribution-postgresql/common/data
 
+  echo "Wait for postgres to accept connections (app-level, not just socket presence)"
+  ok=0
+  for _ in $(seq 30); do
+    percona-distribution-postgresql.pg-isready -q && { ok=1; break; }
+    sleep 2
+  done
+  [ "$ok" = 1 ]
+
   echo "Creating test data"
   ${CMD} -c "CREATE TABLE bkp_probe (id INT PRIMARY KEY, v TEXT);"
   ${CMD} -c "INSERT INTO bkp_probe VALUES (1, 'precious');"
