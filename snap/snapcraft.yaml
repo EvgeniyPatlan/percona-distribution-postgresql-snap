@@ -36,10 +36,12 @@ description: |
   a logical-decoding OUTPUT PLUGIN, not an extension — select it via
   `pg_recvlogical --plugin=wal2json` or
   `pg_create_logical_replication_slot('slot', 'wal2json')`.
-  pg_tde additionally needs a key provider configured before use:
-    SELECT pg_tde_add_key_provider_file('file-keyring',
-      '{"type":"file","path":"/var/snap/percona-distribution-postgresql/common/pg_tde_keyring"}');
-    SELECT pg_tde_set_principal_key('principal-key', 'file-keyring');
+  pg_tde additionally needs a key provider AND a principal key configured
+  before `CREATE TABLE ... USING tde_heap` will work:
+    SELECT pg_tde_add_global_key_provider_file('file-keyring',
+      '/var/snap/percona-distribution-postgresql/common/pg_tde_keyring/keyring');
+    SELECT pg_tde_create_key_using_global_key_provider('principal-key', 'file-keyring');
+    SELECT pg_tde_set_key_using_global_key_provider('principal-key', 'file-keyring');
   See Percona's pg_tde documentation before using this for production data
   — a file keyring is a starting point, not a production keyring.
 
