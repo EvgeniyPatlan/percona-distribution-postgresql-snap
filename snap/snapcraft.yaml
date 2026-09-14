@@ -263,7 +263,7 @@ parts:
       # pg-tde18 is not in postgresql-18's Depends and is pulled in only
       # by this explicit pin. Pinned explicitly anyway per the family's
       # exact-pins-even-for-transitive-deps lesson.
-      - percona-pg-stat-monitor17=1:2.3.2-3.resolute
+      - percona-pg-stat-monitor17=1:2.4.0-1.resolute
       - percona-postgresql-17-pgaudit=1:17.1-4.resolute
       - percona-pgaudit17-set-user=1:4.2.0-6.resolute
       - percona-postgresql-17-pgvector=1:0.8.6-1.resolute
