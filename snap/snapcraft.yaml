@@ -1,6 +1,6 @@
 name: percona-distribution-postgresql
 base: core26
-version: '18.6-1'
+version: '18.7.1-1+1.5'
 summary: Percona Distribution for PostgreSQL 18 in a snap.
 description: |
   Percona Distribution for PostgreSQL packages PostgreSQL 18 together with
@@ -245,32 +245,32 @@ parts:
     plugin: nil
     stage-packages:
       # Core
-      - percona-postgresql-18=3:18.6-1.resolute
-      - percona-postgresql-client-18=3:18.6-1.resolute
-      - percona-postgresql-common=1:293-1.resolute
-      - percona-postgresql-contrib=1:293-1.resolute
-      - percona-postgresql-18-jit=3:18.6-1.resolute
+      - percona-postgresql-18=3:18.7.1-1+1.5.resolute
+      - percona-postgresql-client-18=3:18.7.1-1+1.5.resolute
+      - percona-postgresql-common=1:294-1+4.1.resolute
+      - percona-postgresql-contrib=2:18+294-1+4.1.resolute
+      - percona-postgresql-18-jit=3:18.7.1-1+1.5.resolute
       # Extensions
-      - percona-pg-tde18=1:2.2.2-1.resolute
-      - percona-pg-stat-monitor18=1:2.3.2-4.resolute
-      - percona-postgresql-18-pgaudit=1:18.0-4.resolute
-      - percona-pgaudit18-set-user=1:4.2.0-4.resolute
-      - percona-postgresql-18-pgvector=1:0.8.6-1.resolute
-      - percona-postgresql-18-cron=1:1.6.7-3.resolute
-      - percona-postgresql-18-repack=1:1.5.3-4.resolute
-      - percona-postgresql-18-wal2json=1:2.6-5.resolute
+      - percona-pg-tde18=1:2.2.2-2+10.10.resolute
+      - percona-pg-stat-monitor18=1:2.4.0-1.resolute
+      - percona-postgresql-18-pgaudit=1:18.0-5+7.7.resolute
+      - percona-pgaudit18-set-user=1:4.3.0-1+2.6.resolute
+      - percona-postgresql-18-pgvector=1:0.8.7-1+3.7.resolute
+      - percona-postgresql-18-cron=1:1.6.8-2+4.7.resolute
+      - percona-postgresql-18-repack=1:1.5.3-6+8.7.resolute
+      - percona-postgresql-18-wal2json=1:2.7-1+3.7.resolute
       # Ops (backup / pooling / analysis)
-      - percona-pgbackrest=1:2.59.0-1.resolute
-      - percona-pgbouncer=1:1.25.2-2.resolute
-      - percona-pgbadger=1:13.2-3.resolute
-      - percona-pg-gather=1:33-3.resolute
+      - percona-pgbackrest=1:2.60.0-1+4.7.resolute
+      - percona-pgbouncer=1:1.26.1-1+5.7.resolute
+      - percona-pgbadger=1:13.3-1+1.1.resolute
+      - percona-pg-gather=1:33-4+4.1.resolute
       # HA stack
-      - percona-patroni=1:4.1.5-1.resolute
-      - etcd=1:3.5.33-1.resolute
-      - percona-haproxy=2:2.8.27-1.resolute
-      - percona-pgpool2=1:4.7.2-2.resolute
+      - percona-patroni=1:4.1.5-2+5.7.resolute
+      - etcd=1:3.5.35-1+1.1.resolute
+      - percona-haproxy=2:2.8.31-1+1.1.resolute
+      - percona-pgpool2=1:4.7.3-1+1.7.resolute
       # Heavy: PostGIS + PL languages
-      - percona-postgresql-18-postgis-3=2:3.5.7-3.resolute
+      - percona-postgresql-18-postgis-3=2:3.5.7-4+6.7.resolute
       # -postgis-3 ships only .so + major-version-suffixed .control
       # stubs; -scripts ships the actual postgis--*.sql install/upgrade
       # scripts AND the same .control files (transitively pulled by
@@ -278,10 +278,10 @@ parts:
       # explicitly now that Task 5's smoke proved it's load-bearing (see
       # the packages-deb part's override-prime for the matching
       # postinst-symlink fix `CREATE EXTENSION postgis` needs).
-      - percona-postgresql-18-postgis-3-scripts=2:3.5.7-3.resolute
-      - percona-postgresql-plperl-18=3:18.6-1.resolute
-      - percona-postgresql-plpython3-18=3:18.6-1.resolute
-      - percona-postgresql-pltcl-18=3:18.6-1.resolute
+      - percona-postgresql-18-postgis-3-scripts=2:3.5.7-4+6.7.resolute
+      - percona-postgresql-plperl-18=3:18.7.1-1+1.5.resolute
+      - percona-postgresql-plpython3-18=3:18.7.1-1+1.5.resolute
+      - percona-postgresql-pltcl-18=3:18.7.1-1+1.5.resolute
       # From the base Ubuntu archive, not repo.percona.com (unpinned, like
       # the rest of the family's util-linux staging):
       #   - util-linux: ships /usr/bin/setpriv, used by every wrapper.
