@@ -1,6 +1,6 @@
 name: percona-distribution-postgresql
 base: core26
-version: '17.11-1'
+version: '17.12.1-1+1.5'
 summary: Percona Distribution for PostgreSQL 17 in a snap.
 description: |
   Percona Distribution for PostgreSQL packages PostgreSQL 17 together with
@@ -245,10 +245,10 @@ parts:
     plugin: nil
     stage-packages:
       # Core
-      - percona-postgresql-17=2:17.11-1.resolute
-      - percona-postgresql-client-17=2:17.11-1.resolute
-      - percona-postgresql-common=1:293-1.resolute
-      - percona-postgresql-contrib=1:293-1.resolute
+      - percona-postgresql-17=2:17.12.1-1+1.5.resolute
+      - percona-postgresql-client-17=2:17.12.1-1+1.5.resolute
+      - percona-postgresql-common=1:294-1+4.1.resolute
+      - percona-postgresql-contrib=2:17+294-1+4.1.resolute
       # NO percona-postgresql-17-jit pin: unlike 18, the ppg-17 resolute
       # index ships no such package at all (live-verified 2026-08-25 --
       # zero "jit"/"llvm" hits anywhere in the index). JIT is instead
@@ -257,36 +257,36 @@ parts:
       # difference from 18 (separate package there), not a missing
       # feature: `SHOW jit;` / JIT-compiled plans work with no extra pin.
       # Extensions
-      - percona-pg-tde17=1:2.2.2-1.resolute
+      - percona-pg-tde17=1:2.2.2-2+10.8.resolute
       # percona-pg-tde17 is ALSO now a hard Depends of core
       # percona-postgresql-17 itself (live-verified) -- unlike 18, where
       # pg-tde18 is not in postgresql-18's Depends and is pulled in only
       # by this explicit pin. Pinned explicitly anyway per the family's
       # exact-pins-even-for-transitive-deps lesson.
-      - percona-pg-stat-monitor17=1:2.3.2-3.resolute
-      - percona-postgresql-17-pgaudit=1:17.1-4.resolute
-      - percona-pgaudit17-set-user=1:4.2.0-6.resolute
-      - percona-postgresql-17-pgvector=1:0.8.6-1.resolute
-      - percona-postgresql-17-cron=1:1.6.7-2.resolute
-      - percona-postgresql-17-repack=1:1.5.3-5.resolute
-      - percona-postgresql-17-wal2json=1:2.6-4.resolute
+      - percona-pg-stat-monitor17=1:2.4.0-1.resolute
+      - percona-postgresql-17-pgaudit=1:17.1-5+7.7.resolute
+      - percona-pgaudit17-set-user=1:4.3.0-1+2.6.resolute
+      - percona-postgresql-17-pgvector=1:0.8.7-1+3.7.resolute
+      - percona-postgresql-17-cron=1:1.6.8-2+4.7.resolute
+      - percona-postgresql-17-repack=1:1.5.3-6+9.7.resolute
+      - percona-postgresql-17-wal2json=1:2.7-1+3.7.resolute
       # Ops (backup / pooling / analysis) -- these four are NOT PG-major-
       # version-tied packages; pgbackrest/pgbouncer/pgbadger's ppg-17
       # versions are byte-identical to ppg-18's (live-verified). pg-gather
       # DOES differ (Depends: percona-postgresql-17 specifically, so its
       # own build/version cadence tracks the PG-17 repo, not 18's).
-      - percona-pgbackrest=1:2.59.0-1.resolute
-      - percona-pgbouncer=1:1.25.2-2.resolute
-      - percona-pgbadger=1:13.2-3.resolute
-      - percona-pg-gather=1:33-2.resolute
+      - percona-pgbackrest=1:2.60.0-1+4.7.resolute
+      - percona-pgbouncer=1:1.26.1-1+5.7.resolute
+      - percona-pgbadger=1:13.3-1+1.1.resolute
+      - percona-pg-gather=1:33-4+4.1.resolute
       # HA stack -- also not PG-major-version-tied; all four ppg-17
       # versions are byte-identical to ppg-18's (live-verified).
-      - percona-patroni=1:4.1.5-1.resolute
-      - etcd=1:3.5.33-1.resolute
-      - percona-haproxy=2:2.8.27-1.resolute
-      - percona-pgpool2=1:4.7.2-2.resolute
+      - percona-patroni=1:4.1.5-2+5.7.resolute
+      - etcd=1:3.5.35-1+1.1.resolute
+      - percona-haproxy=2:2.8.31-1+1.1.resolute
+      - percona-pgpool2=1:4.7.3-1+1.7.resolute
       # Heavy: PostGIS + PL languages
-      - percona-postgresql-17-postgis-3=2:3.5.7-2.resolute
+      - percona-postgresql-17-postgis-3=2:3.5.7-4+6.7.resolute
       # -postgis-3 ships only .so + major-version-suffixed .control
       # stubs; -scripts ships the actual postgis--*.sql install/upgrade
       # scripts AND the same .control files (transitively pulled by
@@ -297,10 +297,10 @@ parts:
       # explicitly, matching Task 5's proof that it's load-bearing (see
       # the packages-deb part's override-prime for the matching
       # postinst-symlink fix `CREATE EXTENSION postgis` needs).
-      - percona-postgresql-17-postgis-3-scripts=2:3.5.7-2.resolute
-      - percona-postgresql-plperl-17=2:17.11-1.resolute
-      - percona-postgresql-plpython3-17=2:17.11-1.resolute
-      - percona-postgresql-pltcl-17=2:17.11-1.resolute
+      - percona-postgresql-17-postgis-3-scripts=2:3.5.7-4+6.7.resolute
+      - percona-postgresql-plperl-17=2:17.12.1-1+1.5.resolute
+      - percona-postgresql-plpython3-17=2:17.12.1-1+1.5.resolute
+      - percona-postgresql-pltcl-17=2:17.12.1-1+1.5.resolute
       # From the base Ubuntu archive, not repo.percona.com (unpinned, like
       # the rest of the family's util-linux staging):
       #   - util-linux: ships /usr/bin/setpriv, used by every wrapper.
